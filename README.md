@@ -60,5 +60,5 @@ TODO: Add a configuration file.
 # Importing AIP packages into hyrax
 
 ```
-rake packager:aip["/path/to/zip/file.zip","admin@example.edu"] RAILS_ENV=<target environment
+rake packager:aip["/path/to/zip/file.zip","admin@example.edu"] RAILS_ENV=<target environment>
 ```
