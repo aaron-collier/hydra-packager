@@ -1,5 +1,7 @@
 require 'rubygems'
 require 'zip'
+require 'yaml'
+require 'colorize'
 
 @type_to_work_map = {
   "Thesis" => "Thesis",
@@ -57,9 +59,7 @@ require 'zip'
   "dc.title.alternative" => "alternative_title",
   "dc.type" => "resource_type",
   "dc.type.genre" => "resource_type",
-  "dc.date.updated" => "date_modified",
   "dc.contributor.sponsor" => "sponsor",
-  "dc.description.embargoterms" => "embargo_terms",
   "dc.advisor" => "advisor",
   "dc.genre" => "resource_type",
   "dc.contributor.committeemember" => "committee_member",
@@ -73,12 +73,14 @@ require 'zip'
   "dc.date.available" => "date_uploaded", # Newspaper
   "dc.date.accessioned" => "date_accessioned", # Thesis
   "dc.date.embargountil" => "embargo_release_date", # Thesis
+  "dc.date.updated" => "date_modified",
+  "dc.description.embargoterms" => "embargo_terms",
 }
 
 namespace :packager do
 
   task :aip, [:file, :user_id] =>  [:environment] do |t, args|
-    puts "loading task import"
+    puts "Starting rake task ".green + "packager:aip".yellow
 
     @coverage = "" # for holding the current DSpace COMMUNITY name
     @sponsorship = "" # for holding the current DSpace CoLLECTIOn name
@@ -89,17 +91,14 @@ namespace :packager do
     @defaultDepositor = User.find_by_user_key(args[:user_id]) # THIS MAY BE UNNECESSARY
     @default_type = 'Thesis'
 
-    puts "Building Import Package from AIP Export file: " + @source_file
+    puts "Loading import package from #{@source_file}"
 
-    abort("Exiting packager: input file [" + @source_file + "] not found.") unless File.exists?(@source_file)
+    abort("Exiting packager: input file [#{@source_file}] not found.".red) unless File.exists?(@source_file)
 
     @input_dir = File.dirname(@source_file)
-    @output_dir = File.join(@input_dir, "unpacked") ## File.basename(@source_file,".zip"))
-    @complete_dir = File.join(@input_dir, "complete") ## File.basename(@source_file,".zip"))
-    @error_dir = File.join(@input_dir, "error") ## File.basename(@source_file,".zip"))
-    Dir.mkdir @output_dir unless Dir.exist?(@output_dir)
-    Dir.mkdir @complete_dir unless Dir.exist?(@complete_dir)
-    Dir.mkdir @error_dir unless Dir.exist?(@error_dir)
+    @output_dir = initialize_directory(File.join(@input_dir, "unpacked")) ## File.basename(@source_file,".zip"))
+    @complete_dir = initalize_directory(File.join(@input_dir, "complete")) ## File.basename(@source_file,".zip"))
+    @error_dir = initialize_directory(File.join(@input_dir, "error")_ ## File.basename(@source_file,".zip"))
 
     unzip_package(File.basename(@source_file))
 
@@ -315,4 +314,16 @@ def getUser(email)
   end
   # puts "returning user: " + user.email
   return user
+end
+
+def initialize_directory(dir)
+  Dir.mkdir dir unless Dir.exist?(dir)
+  return dir
+end
+
+# Method for printing to the shell without puts newline. Good for showing
+# a shell progress bar, etc...
+def print_and_flush(str)
+  print str
+  $stdout.flush
 end
