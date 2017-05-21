@@ -1,2 +1,0 @@
-class HydraPackager
-end
