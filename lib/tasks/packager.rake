@@ -3,80 +3,6 @@ require 'zip'
 require 'yaml'
 require 'colorize'
 
-@type_to_work_map = {
-  "Thesis" => "Thesis",
-  "Dissertation" => "Dissertation",
-  "Project" => "Project",
-  "Newspaper" => "Newspaper",
-  "Article" => "Publication",
-  "Poster" => "Publication",
-  "Report" => "Publication",
-  "Preprint" => "Publication",
-  "Technical Report" => "Publication",
-  "Working Paper" => "Publication",
-  "painting" => "CreativeWork",
-  "ephemera" => "CreativeWork",
-  "textiles" => "CreativeWork",
-  "Empirical Research" => "CreativeWork",
-  "Award Materials" => "CreativeWork",
-  "photograph" => "CreativeWork",
-  "Mixed Media" => "CreativeWork",
-  "Other" =>  "CreativeWork",
-  "Creative Works" => "CreativeWork"
-}
-
-@attributes = {
-  "dc.contributor" => "contributor",
-  "dc.contributor.advisor" => "advisor",
-  "dc.contributor.author" => "creator",
-  "dc.creator" => "creator",
-  "dc.date" => "date_created",
-  "dc.date.created" => "date_created",
-  "dc.date.issued" => "date_issued",
-  "dc.date.submitted" => "date_submitted",
-  "dc.identifier" => "identifier",
-  "dc.identifier.citation" => "bibliographic_citation",
-  "dc.identifier.isbn" => "identifier",
-  "dc.identifier.issn" => "identifier",
-  "dc.identifier.other" => "identifier",
-  "dc.identifier.uri" => "handle",
-  "dc.description" => "description",
-  "dc.description.abstract" => "abstract",
-  "dc.description.provenance" => "provenance",
-  "dc.description.sponsorship" => "sponsor",
-  "dc.format.extent" => "extent",
-  # "dc.format.medium" => "",
-  "dc.language" => "language",
-  "dc.language.iso" => "language",
-  "dc.publisher" => "publisher",
-  "dc.relation.ispartofseries" => "is_part_of",
-  "dc.relation.uri" => "related_url",
-  "dc.rights" => "rights_statement",
-  "dc.subject" => "subject",
-  "dc.subject.lcc" => "identifier",
-  "dc.subject.lcsh" => "keyword",
-  "dc.title" => "title",
-  "dc.title.alternative" => "alternative_title",
-  "dc.type" => "resource_type",
-  "dc.type.genre" => "resource_type",
-  "dc.contributor.sponsor" => "sponsor",
-  "dc.advisor" => "advisor",
-  "dc.genre" => "resource_type",
-  "dc.contributor.committeemember" => "committee_member",
-  # dc.note" => "",
-  "dc.rights.license" => "license",
-  "dc.rights.usage" => "rights_statement",
-  "dc.sponsor" => "sponsor"
-}
-
-@singulars = {
-  "dc.date.available" => "date_uploaded", # Newspaper
-  "dc.date.accessioned" => "date_accessioned", # Thesis
-  "dc.date.embargountil" => "embargo_release_date", # Thesis
-  "dc.date.updated" => "date_modified",
-  "dc.description.embargoterms" => "embargo_terms",
-}
-
 namespace :packager do
 
   task :aip, [:file] =>  [:environment] do |t, args|
@@ -160,7 +86,7 @@ def process_mets (mets_file,parentColl = nil)
   uploadedFiles = Array.new
   depositor = ""
   type = ""
-  params = Hash.new {|h,k| h[k]=[]}
+  # params = Hash.new {|h,k| h[k]=[]}
 
   if File.exist?(mets_file)
     dom = Nokogiri::XML(File.open(mets_file))
@@ -168,26 +94,7 @@ def process_mets (mets_file,parentColl = nil)
     current_type = dom.root.attr("TYPE")
     current_type.slice!("DSpace ")
 
-    data = dom.xpath("//dim:dim[@dspaceType='"+current_type+"']/dim:field", 'dim' => 'http://www.dspace.org/xmlns/dspace/dim')
-
-    data.each do |element|
-     field = element.attr('mdschema') + "." + element.attr('element')
-     field = field + "." + element.attr('qualifier') unless element.attr('qualifier').nil?
-
-     # Due to duplication and ambiguity of output fields from DSpace
-     # we need to do some very simplistic field validation and remapping
-     case field
-     when "dc.creator"
-       if element.inner_html.match(/@/)
-         depositor = getUser(element.inner_html) unless @debugging
-       end
-     else
-       # params[@attributes[field]] << element.inner_html.gsub "\r", "\n" if @attributes.has_key? field
-       # params[@singulars[field]] = element.inner_html.gsub "\r", "\n" if @singulars.has_key? field
-       params[@attributes[field]] << element.inner_html if @attributes.has_key? field
-       params[@singulars[field]] = element.inner_html if @singulars.has_key? field
-     end
-    end
+    params = collect_params(dom)
 
     case dom.root.attr("TYPE")
     when "DSpace COMMUNITY"
@@ -227,16 +134,18 @@ def process_mets (mets_file,parentColl = nil)
         thumbnailId = nil
         case newFile.parent.parent.attr('USE') # grabbing parent.parent seems off, but it works.
         when "THUMBNAIL"
-          newFileName = newFile.attr('xlink:href')
-          log.info "renaming thumbnail bitstream #{newFileName} -> #{originalFileName}"
-          File.rename(@bitstream_dir + "/" + newFileName, @bitstream_dir + "/" + originalFileName)
-          file = File.open(@bitstream_dir + "/" + originalFileName)
+          if config['include_thumbnail']
+            newFileName = newFile.attr('xlink:href')
+            log.info "renaming thumbnail bitstream #{newFileName} -> #{originalFileName}"
+            File.rename(@bitstream_dir + "/" + newFileName, @bitstream_dir + "/" + originalFileName)
+            file = File.open(@bitstream_dir + "/" + originalFileName)
 
-          sufiaFile = Hyrax::UploadedFile.create(file: file)
-          sufiaFile.save
+            sufiaFile = Hyrax::UploadedFile.create(file: file)
+            sufiaFile.save
 
-          uploadedFiles.push(sufiaFile)
-          file.close
+            uploadedFiles.push(sufiaFile)
+            file.close
+          end
         when "TEXT"
         when "ORIGINAL"
           newFileName = newFile.attr('xlink:href')
@@ -269,6 +178,30 @@ def process_mets (mets_file,parentColl = nil)
   end
 end
 
+def collect_params(dom)
+
+  params = Hash.new {|h,k| h[k]=[]}
+
+  config['fields'].each do |field|
+    field = field[1]
+    if field.include? "xpath"
+      field['xpath'].each do |current_xpath|
+        metadata = dom.xpath("#{config['DSpace ITEM']['desc_metadata_prefix']}#{current_xpath}", config['DSpace ITEM']['namespace'])
+        if !metadata.empty?
+          if field['type'].include? "Array"
+            metadata.each do |node|
+              params[field['property']] << node.inner_html
+            end # metadata.each
+          else
+            params[field['property']] = metadata.inner_html
+          end # "Array"
+        end # empty?
+      end # xpath.each
+    end # field.xpath
+  end # typeConfig.each
+  return params
+end # collect_params
+
 def createCollection (params, parent = nil)
   coll = AdminSet.new(params)
 #  coll = Collection.new(id: ActiveFedora::Noid::Service.new.mint)
@@ -291,7 +224,7 @@ def createItem (params, depositor, parent = nil)
   rType = @default_type
   rType = params['resource_type'].first unless params['resource_type'].first.nil?
 
-  item = Kernel.const_get(@type_to_work_map[rType]).new(id: id)
+  item = Kernel.const_get(config['type_to_work_map'][rType]).new(id: id)
 
   # item = Thesis.new(id: ActiveFedora::Noid::Service.new.mint)
   # item = Newspaper.new(id: ActiveFedora::Noid::Service.new.mint)
