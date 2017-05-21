@@ -79,6 +79,7 @@ require 'colorize'
 
 namespace :packager do
 
+  desc 'Import items AIP format items exported from DSpace.'
   task :aip, [:file, :user_id] =>  [:environment] do |t, args|
     puts "Starting rake task ".green + "packager:aip".yellow
 
