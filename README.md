@@ -33,7 +33,11 @@ Download the rake file into your apps `lib/tasks` folder:
 
 ```
 cd lib/tasks
-wget https://raw.githubusercontent.com/aaron-collier/hydra-packager/master/lib/tasks/packager.rake
+wget https://raw.githubusercontent.com/aaron-collier/hydra-packager/configuration/lib/tasks/packager.rake
+mkdir app/services/packager
+wget https://raw.githubusercontent.com/aaron-collier/hydra-packager/configuration/app/services/packager/packager.rake
+cd config
+wget https://raw.githubusercontent.com/aaron-collier/hydra-packager/configuration/config/packager.yml 
 ```
 
 # Parameters

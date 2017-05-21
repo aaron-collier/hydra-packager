@@ -1,0 +1,19 @@
+work_type: "default"
+metadata_file: "mets.xml"
+# metadata_prefix: "//xmlns:mdWrap[@OTHERMDTYPE='DIM']/dim:xmldata/dim:dim[@dspaceType='ITEM']"
+# item_metadata_prefix: "//dim:dim[@dspaceType='ITEM']"
+# collection_metadata_prefix: "//dim:dim[@dspaceType='COLLECTION']"
+depositor: acollier@calstate.edu
+input_dir: /Users/acollier/Temp/drew/
+create_admin_sets: true
+
+# exit_on_error: when an AIP package encounters an error should the import process end or continue?
+# true - ends processing on error
+# false - continues processing
+exit_on_error: true
+
+# output_level: How much will be output to the shell while running
+# quiet - Nothing will be output
+# minimal - a running progress bar will be output
+# verbose - running progress text will be output
+output_level: 'verbose'
