@@ -183,17 +183,16 @@ def collect_params(dom)
   params = Hash.new {|h,k| h[k]=[]}
 
   config['fields'].each do |field|
-    field = field[1]
     if field.include? "xpath"
       field['xpath'].each do |current_xpath|
         metadata = dom.xpath("#{config['DSpace ITEM']['desc_metadata_prefix']}#{current_xpath}", config['DSpace ITEM']['namespace'])
         if !metadata.empty?
           if field['type'].include? "Array"
             metadata.each do |node|
-              params[field['property']] << node.inner_html
+              params[field[0]] << node.inner_html
             end # metadata.each
           else
-            params[field['property']] = metadata.inner_html
+            params[field[0]] = metadata.inner_html
           end # "Array"
         end # empty?
       end # xpath.each
