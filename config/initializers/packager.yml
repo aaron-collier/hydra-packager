@@ -43,6 +43,16 @@ type_to_work_map:
   Other: CreativeWork
   Creative Works: CreativeWork
 
+collection_structure:
+  xpath: "//mets:mptr[@LOCTYPE='URL']"
+  namespace:
+    mets: http://www.loc.gov/METS/
+
+bistream_structure:
+  xpath: "//premis:object"
+  namespace:
+    premis: http://www.loc.gov/standards/premis
+    
 DSpace COMMUNITY:
   desc_metadata_prefix: "//dim:dim[@dspaceType='COMMUNITY']"
   namespace:

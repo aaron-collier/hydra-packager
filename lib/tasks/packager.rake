@@ -40,12 +40,7 @@ def log
 end
 
 def config
-  @config ||= OpenStruct.new(YAML.load_file("config/packager.yml")) # [MY_ENV])
-end
-
-def type_config
-  # @typeConfig ||= Array.new
-  @typeConfig = OpenStruct.new(YAML.load_file("config/packager/" + @type + ".yml"))
+  @config ||= OpenStruct.new(YAML.load_file("config/initializers/packager.yml")) # [MY_ENV])
 end
 
 def unzip_package(zip_file,parentColl = nil)
@@ -94,87 +89,28 @@ def process_mets (mets_file,parentColl = nil)
     current_type = dom.root.attr("TYPE")
     current_type.slice!("DSpace ")
 
+    log.info "Collecting parameters"
     params = collect_params(dom)
 
-    case dom.root.attr("TYPE")
-    when "DSpace COMMUNITY"
-      type = "admin_set"
-      # @coverage = params["title"][0]
-      # puts "*** COMMUNITY ["+@coverage+"] ***"
-    when "DSpace COLLECTION"
-      type = "admin_set"
-      # @sponsorship = params["title"][0]
-      # puts "***** COLLECTION ["+@sponsorship+"] *****"
-    when "DSpace ITEM"
-      log.info "ingesting item: #{params['handle'][0]}"
-      type = "work"
-      # params["sponsorship"] << @sponsorship
-      # params["coverage"] << @coverage
-    end
+    log.info "Collecting files"
+    process_structure_files(dom)
 
-    if type == 'admin_set'
-      structData = dom.xpath('//mets:mptr', 'mets' => 'http://www.loc.gov/METS/')
-      structData.each do |fileData|
-        case fileData.attr('LOCTYPE')
-        when "URL"
-          unzip_package(fileData.attr('xlink:href'))
-        end
-      end
-    elsif type == 'work'
+    collect_bitstreams(dom).each do |bitstream|
 
-      fileMd5List = dom.xpath("//premis:object", 'premis' => 'http://www.loc.gov/standards/premis')
-      fileMd5List.each do |fptr|
-        fileChecksum = fptr.at_xpath("premis:objectCharacteristics/premis:fixity/premis:messageDigest", 'premis' => 'http://www.loc.gov/standards/premis').inner_html
-        originalFileName = fptr.at_xpath("premis:originalName", 'premis' => 'http://www.loc.gov/standards/premis').inner_html
+      ## Commented out while refactoring parsing code
+      ## file = File.open(bitstream['file_name'])
+      ## attached_file = Hyrax::UploadedFile.create(file: file)
+      ## attached_file.save
+      ## uploadedFiles << attached_file
+      ## file.close
+      ###########################################################
+    end # collect_files.each
 
-        ########################################################################################################################
-        # This block seems incredibly messy and should be cleaned up or moved into some kind of method
-        #
-        newFile = dom.at_xpath("//mets:file[@CHECKSUM='"+fileChecksum+"']/mets:FLocat", 'mets' => 'http://www.loc.gov/METS/')
-        thumbnailId = nil
-        case newFile.parent.parent.attr('USE') # grabbing parent.parent seems off, but it works.
-        when "THUMBNAIL"
-          if config['include_thumbnail']
-            newFileName = newFile.attr('xlink:href')
-            log.info "renaming thumbnail bitstream #{newFileName} -> #{originalFileName}"
-            File.rename(@bitstream_dir + "/" + newFileName, @bitstream_dir + "/" + originalFileName)
-            file = File.open(@bitstream_dir + "/" + originalFileName)
-
-            sufiaFile = Hyrax::UploadedFile.create(file: file)
-            sufiaFile.save
-
-            uploadedFiles.push(sufiaFile)
-            file.close
-          end
-        when "TEXT"
-        when "ORIGINAL"
-          newFileName = newFile.attr('xlink:href')
-          log.info "renaming original bitstream #{newFileName} -> #{originalFileName}"
-          File.rename(@bitstream_dir + "/" + newFileName, @bitstream_dir + "/" + originalFileName)
-          file = File.open(@bitstream_dir + "/" + originalFileName)
-          sufiaFile = Hyrax::UploadedFile.create(file: file)
-          sufiaFile.save
-          uploadedFiles.push(sufiaFile)
-          file.close
-        when "LICENSE"
-          # Temp commented to deal with PDFs
-          # newFileName = newFile.attr('xlink:href')
-          # puts "license text: " + @bitstream_dir + "/" + newFileName
-          # file = File.open(@bitstream_dir + "/" + newFileName, "rb")
-          # params["rights_statement"] << file.read
-          # file.close
-        end
-        ###
-        ########################################################################################################################
-
-      end
-
-      log.info "Creating Hyrax Item..."
-      item = createItem(params,depositor) unless @debugging
-      log.info "Attaching Uploaded Files..."
-      workFiles = AttachFilesToWorkJob.perform_now(item,uploadedFiles) unless @debugging
-      return item
-    end
+    ## Commented out while refactoring parsing code
+    ## item = createItem(params)
+    ## workFiles = AttachFilesToWorkJob.perform_now(item,uploadedFiles) unless item.nil?
+    ## return item
+    ####################################################################################
   end
 end
 
@@ -201,16 +137,35 @@ def collect_params(dom)
   return params
 end # collect_params
 
-def createCollection (params, parent = nil)
-  coll = AdminSet.new(params)
-#  coll = Collection.new(id: ActiveFedora::Noid::Service.new.mint)
-#  params["visibility"] = "open"
-#  coll.update(params)
-#  coll.apply_depositor_metadata(@current_user.user_key)
-  coll.save
-#  return coll
+###############################################################################
+# If structure files exist, run the package process on each one.
+# If bitstream files exist, collect them and attach to the item.
+# TODO: Need to resolve above, for License files determine if they are text or PDF
+def process_structure_files(dom)
+  structData = dom.xpath("#{config['collection_structure']['xpath']}", config['collection_structure']['namespace'])
+  structData.each do |fileData|
+    unzip_package(fileData.attr('xlink:href'))
+  end # structData.each
 end
 
+def collect_bitstreams(dom)
+  fileList = dom.xpath("#{config['bitstream_structure']['xpath']}", config['bitstream_structure']['namespace'])
+  fileArray = []
+
+  fileList.each do |fptr|
+    fileChecksum = fptr.at_xpath("premis:objectCharacteristics/premis:fixity/premis:messageDigest", 'premis' => 'http://www.loc.gov/standards/premis').inner_html
+    originalFileName = fptr.at_xpath("premis:originalName", 'premis' => 'http://www.loc.gov/standards/premis').inner_html.delete(' ')
+    dspaceExportedFile = dom.at_xpath("//mets:file[@CHECKSUM='"+fileChecksum+"']/mets:FLocat", 'mets' => 'http://www.loc.gov/METS/')
+    # TODO: Error check files by MD5 Hash
+
+    newFileName = dspaceExportedFile.attr('xlink:href')
+    File.rename(@bitstream_dir + "/" + newFileName, @bitstream_dir + "/" + originalFileName)
+    fileArray << {'file_type' => dspaceExportedFile.parent.parent.attr('USE'), 'file_name' => File.join(@bitstream_dir,originalFileName)}
+  end # fileList.each
+
+  return fileArray
+end # collect_files
+###############################################################################
 
 def createItem (params, depositor, parent = nil)
   if depositor == ''
