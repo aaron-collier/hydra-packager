@@ -9,22 +9,21 @@ namespace :packager do
   task :aip, [:file] =>  [:environment] do |t, args|
     log.info "Starting rake task ".green + "packager:aip".yellow
 
-    @source_file = args[:file] or raise "No source input file provided."
+    params = { :source_file => args[:file],
+               :source_path => File.join(input_path,args[:file]),
+               :default_resource_type => "Thesis"
+             } or raise "No source input file provided."
 
-    ## TODO: Put these options into a config file
-    @default_resource_type = 'Thesis'
+    log.info "Loading import package from #{params[:source_file]}"
 
-    log.info "Loading import package from #{@source_file}"
+    log.info params[:source_file]
 
-    log.info input_path
-
-
-    unless File.exists?(File.join(input_path,@source_file))
-      log.error "Exiting packager: input file [#{@source_file}] not found."
+    unless File.exists?(params[:source_path])
+      log.error "Exiting packager: input file [#{params[:source_file]}] not found."
       abort
     end
 
-    unzip_package(@source_file)
+    unzip_package(params)
 
   end
 end
@@ -34,7 +33,7 @@ def log
 end
 
 def config
-  @config ||= OpenStruct.new(YAML.load_file("config/initializers/packager.yml")) # [MY_ENV])
+  @config ||= Rails.application.config_for(:packager)
 end
 
 def input_path
@@ -53,40 +52,43 @@ def error_path
   @error_path ||= initialize_directory(File.join(input_path, "error"))
 end
 
-def unzip_package(zip_file,parentColl = nil)
+def unzip_package(params)
 
-  zip_file_path = File.join(input_path, zip_file)
+  params[:unpacked_path] = initialize_directory(File.join(output_path, File.basename(params[:source_file], ".zip")))
+  params[:files] = Array.new
 
-  if File.exist?(zip_file_path)
-    file_path = File.join(@output_dir, File.basename(zip_file_path, ".zip"))
-    @bitstream_dir = file_path
-    Dir.mkdir file_path unless Dir.exist?(file_path)
-    Zip::File.open(zip_file_path) do |file_to_extract|
-      file_to_extract.each do |compressed_file|
-        extract_path = File.join(file_path, compressed_file.name)
-        zipfile.extract(compressed_file,extract_path) unless File.exist?(extract_path)
-      end
-    end
-  end
-end
-
-def
-    if File.exist?(File.join(file_dir, "mets.xml"))
-      begin
-        processed_mets = process_mets(File.join(file_dir,"mets.xml"),parentColl)
-        File.rename(zpath,File.join(@complete_dir,zip_file))
-      rescue StandardError => e
-        log.error e
-        File.rename(zpath,File.join(@error_dir,zip_file))
-        abort if config['exit_on_error']
-      end
-      return processed_mets
-    else
-      log.warn "No METS data found in package."
+  Zip::File.open(params[:source_path]) do |file_to_extract|
+    file_to_extract.each do |compressed_file|
+      puts File.join(params[:unpacked_path], compressed_file.name)
+      params[:files] << {:source_path => File.join(params[:unpacked_path], compressed_file.name)}
+      unpack_file(file_to_extract,File.join(params[:unpacked_path], compressed_file.name))
     end
   end
 
+  puts params
 end
+
+def unpack_file(compressed_file,file_to_unpack)
+  compressed_file.extract(File.basename(file_to_unpack),file_to_unpack) unless File.exist?(file_to_unpack)
+  return file_to_unpack
+end
+
+def get_mets_data
+  if File.exist?(File.join(file_dir, "mets.xml"))
+    begin
+      processed_mets = process_mets(File.join(file_dir,"mets.xml"),parentColl)
+      File.rename(zpath,File.join(@complete_dir,zip_file))
+    rescue StandardError => e
+      log.error e
+      File.rename(zpath,File.join(@error_dir,zip_file))
+      abort if config['exit_on_error']
+    end
+    return processed_mets
+  else
+    log.warn "No METS data found in package."
+  end
+end
+
 
 def process_mets (mets_file,parentColl = nil)
 
